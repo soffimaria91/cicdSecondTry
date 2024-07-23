@@ -1,0 +1,30 @@
+name: Salesforce Deployment
+
+on:
+  push:
+    branches: [ main ]  # Adjust this to your main branch name
+
+jobs:
+  deploy-to-org-b:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      
+      - name: Use Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '14'  # You can specify a different version if needed
+      
+      - name: Install Salesforce CLI
+        run: npm install sfdx-cli --global
+      
+      - name: Verify Salesforce CLI Installation
+        run: sfdx --version
+      
+      - name: Authorize Org B
+        env:
+          SFDX_AUTH_URL: ${{ secrets.ORG_B_AUTH_URL }}
+        run: sfdx auth:sfdxurl:store -f <(echo $SFDX_AUTH_URL) -a OrgB
+      
+      - name: Deploy to Org B
+        run: sfdx force:source:deploy -p force-app -u OrgB
