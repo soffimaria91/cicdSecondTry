@@ -1,30 +1,48 @@
-name: Salesforce Deployment
+name: Salesforce Selective Deployment
 
 on:
   push:
     branches: [ main ]  # Adjust this to your main branch name
+    paths:
+      - 'force-app/**'  # Only trigger on changes in the force-app directory
 
 jobs:
   deploy-to-org-b:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      
+        with:
+          fetch-depth: 0  # Fetch all history for all branches and tags
+
+      - name: Get changed files
+        id: changed-files
+        run: |
+          echo "::set-output name=all::$(git diff --name-only ${{ github.event.before }} ${{ github.sha }} | grep '^force-app/' | tr '\n' ',' | sed 's/,$//')"
+
       - name: Use Node.js
         uses: actions/setup-node@v2
         with:
-          node-version: '20'  # You can specify a different version if needed
-      
+          node-version: '20'
+
       - name: Install Salesforce CLI
         run: npm install sfdx-cli --global
-      
+
       - name: Verify Salesforce CLI Installation
         run: sfdx --version
-      
+
       - name: Authorize Org B
         env:
           SFDX_AUTH_URL: ${{ secrets.ORG_B_AUTH_URL }}
         run: sfdx auth:sfdxurl:store -f <(echo $SFDX_AUTH_URL) -a OrgB
-      
+
+      - name: Validate Deployment
+        if: steps.changed-files.outputs.all != ''
+        run: |
+          IFS=',' read -ra CHANGED_FILES <<< "${{ steps.changed-files.outputs.all }}"
+          sfdx force:source:deploy -p "${CHANGED_FILES[@]}" -u OrgB --checkonly --testlevel NoTestRun
+
       - name: Deploy to Org B
-        run: sfdx force:source:deploy -p force-app -u OrgB
+        if: success() && steps.changed-files.outputs.all != ''
+        run: |
+          IFS=',' read -ra CHANGED_FILES <<< "${{ steps.changed-files.outputs.all }}"
+          sfdx force:source:deploy -p "${CHANGED_FILES[@]}" -u OrgB
